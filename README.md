@@ -46,6 +46,7 @@ pip install mir-eval==0.7
 pip install parse==1.19.0
 ```
 
+See the full [requirements](assets/requirements.txt) for a comprehensive list.
 
 
 
