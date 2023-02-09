@@ -196,7 +196,7 @@ class OnsetVelocityNet(torch.nn.Module):
 
         :returns: ``(x_stages, stem_out)``, where ``stem_out`` is a tensor of
           shape ``(b, stem_chans, keys, t-1)`` and ``x_stages`` is a list with
-          one onset prediction per stage, each of shape ``(b, 1, keys, t-1)``.
+          one onset prediction per stage, each of shape ``(b, keys, t-1)``.
         """
         xdiff = x.diff(dim=-1)  # (b, melbins, t-1)
         # x+xdiff has shape (b, 2, melbins, t-1)
