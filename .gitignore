@@ -1,6 +1,9 @@
 # Repo-specific
 datasets/*
+# if symlink
+datasets
 out/*
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
