@@ -3,7 +3,9 @@
 
 
 """
+This module contains package-wide constants and conventions.
 """
+
 
 from parse import parse
 
@@ -17,7 +19,7 @@ PIANO_MIDI_RANGE = (21, 109)  # 21 included, 109 excluded
 
 
 # ##############################################################################
-# # HELPERS
+# # I/O
 # ##############################################################################
 class HDF5PathManager:
     """

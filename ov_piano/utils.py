@@ -276,3 +276,60 @@ def breakpoint_json(path="breakpoint.json", step=None):
     except Exception as e:
         print("Exception in breakpoint_json! returning False.", e)
         return False
+
+
+class MaskedBCEWithLogitsLoss(torch.nn.BCEWithLogitsLoss):
+    """
+    This module extends ``torch.nn.BCEWithlogitsloss`` with the possibility
+    to multiply each scalar loss by a mask number between 0 and 1, before
+    aggregating via average.
+    """
+
+    def __init__(self, *args, **kwargs):
+        """
+        """
+        super().__init__(*args, **kwargs, reduction="none")
+
+    def forward(self, pred, target, mask=None):
+        """
+        """
+        eltwise_loss = super().forward(pred, target)
+        if mask is not None:
+            assert mask.min() >= 0, "Mask must be in [0, 1]!"
+            assert mask.max() <= 1, "Mask must be in [0, 1]!"
+            eltwise_loss = eltwise_loss * mask
+        result = eltwise_loss.mean()
+        #
+        return result
+
+
+def init_weights(module, init_fn=torch.nn.init.kaiming_normal,
+                 bias_val=0.0, verbose=False):
+    """
+    Custom, layer-aware initializer for PyTorch modules.
+
+    :param init_fn: initialization function, such that ``init_fn(weight)``
+      modifies in-place the weight values. If ``None``, found weights won't be
+      altered
+    :param float bias_val: Any module with biases will initialize them to this
+      constant value
+
+    Usage example, inside of any ``torch.nn.Module.__init__`` method:
+
+    if init_fn is not None:
+            self.apply(lambda module: init_weights(module, init_fn, 0.0))
+
+    Apply is applied recursively to any submodule inside, so this works.
+    """
+    if isinstance(module, (torch.nn.Linear,
+                           torch.nn.Conv1d,
+                           torch.nn.Conv2d)):
+        if init_fn is not None:
+            init_fn(module.weight)
+        if module.bias is not None:
+            module.bias.data.fill_(bias_val)
+    elif isinstance(module, (torch.nn.GRU, torch.nn.LSTM)):
+        raise NotImplementedError("No RNNs supported at the moment :)")
+    else:
+        if verbose:
+            print("init_weights: ignored module:", module.__class__.__name__)

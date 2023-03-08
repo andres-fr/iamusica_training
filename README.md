@@ -1,5 +1,7 @@
 # iamusica_training
 
+
+
 The present repository hosts the software needed to train and evaluate a Deep Learning piano onset+velocity detection model, developed in the context of the [IAMúsica](https://joantrave.net/en/iamusica/) project. Specifically, it provides the means to:
 * Install the required software dependencies
 * Download and preprocess the required dataset
@@ -18,7 +20,7 @@ See [this companion repository](https://github.com/andres-fr/iamusica_demo) for 
 This is [Free/Libre and Open Source Software](https://www.gnu.org/philosophy/floss-and-foss.en.html), see the [LICENSE](LICENSE) for more details.
 
 
-
+![input and output example](assets/qualitative_plot_bone_small.png)
 
 
 ---
@@ -112,10 +114,6 @@ MAPS ROOT PATH
 
 
 
-
-
-
-
 ---
 
 # Data preprocessing
@@ -133,6 +131,7 @@ Processing `MAESTROv3` with the default settings takes about 30min on a 16-core 
 > :warning: **onset/offset collision**:
 > Note that creating piano rolls from MIDI requires to time-quantize the events. If the time resolution is too low, it could happen that two events for the same note end up in the same "bin", and therefore ignored. Another possible explanation is that the MIDI file includes redundant/inconsistent messages, which are also ignored.
 > During the preprocessing of MAESTRO/MAPS we can expect quite a few of those to happen, most likely due to the latter reason. We can ignore them, since we don't use piano rolls for evaluation.
+
 
 
 ### Preprocessing other supported datasets:
@@ -163,7 +162,7 @@ Processing `MAPS` with the default settings takes about 20min on a 16-core CPU. 
 
 # Running/evaluating the model
 
-This repository also hosts an instance of a [pretrained model](assets/OnsetVelocityNet_2022_09_08_01_27_40.139step=95000_f1=0.9640.torch) (25.5MB), trained on MAESTROv3 for 95000 steps with the default settings and no augmentation. The evaluation script can be run on the pretrained model with default parameters as follows:
+This repository also hosts an instance of a [pretrained model](assets/OnsetVelocityNet_2022_09_08_01_27_40.139step=95000_f1=0.9640.torch). The evaluation script can be run on the pretrained model with default parameters as follows:
 
 
 
@@ -210,25 +209,6 @@ ONSETS+VELOCITIES:
 ```
 
 
-### Fast learning and inference
-
-In contrast with other state-of-the-art models from the literature that surpass an F1-score of 96% for note onset detection (e.g. [Kong et al.](https://arxiv.org/abs/2010.01815), [Hawthorne et al.](https://arxiv.org/abs/2107.09142)), this model is **fully convolutional, has less parameters and learns faster**). Furthermore, our time resolution for the spectrograms is 24ms (in contrast with the 10ms from the above cited sources), and we make use of a very simple but effective multi-task supervision.
-
-To illustrate learning speed, when trained with batches of 30 5-second chunks on MAESTROv3 (19119 batches per epoch), the model processes 1000 batches every 75 minutes on a RTX3070-8GB-laptop GPU. The training progress is illustrated in the table below:
-
-
-| Training step | Onset F1 (MAESTROv3) | Onset+Velocity F1 (MAESTROv3) |
-|:-------------:|:--------------------:|:-----------------------------:|
-|      500      |        89.37%        |             79.63%            |
-|     1000      |        91.90%        |             83.61%            |
-|     2500      |        93.63%        |             86.67%            |
-|     6000      |        94.71%        |             88.80%            |
-|    95000      |        96.43%        |             92.83%            |
-
-
-Among other advantages, this allows for precise real-time detection on commodity hardware. Check the companion repository provided above for a real-time, graphical demonstration.
-
-
 
 
 ---
@@ -248,7 +228,7 @@ CONFIGURATION:
 DEVICE: cuda
 MAESTRO_PATH: datasets/maestro/maestro-v3.0.0
 MAESTRO_VERSION: 3
-HDF5_MEL_PATH: datasets/MAESTROv3_logmel_sr=16000_stft=2048w384h_mel=250(50-8000).h5
+HDF5_MEL_PATH: datasets/MAESTROv3_logmel_sr=16000_stft=2048w384h_mel=229(50-8000).h5
 HDF5_ROLL_PATH: datasets/MAESTROv3_roll_quant=0.024_midivals=128_extendsus=True.h5
 SNAPSHOT_INPATH: null
 OUTPUT_DIR: out
@@ -284,6 +264,12 @@ XV_THRESHOLDS:
 ```
 
 The script preiodically cross-validates the model every `XV_EVERY` batches, and saves the crossvalidated model snapshots under `OUTPUT_DIR`, for further usage and evaluation.
+
+The script also produces a log in the form or one JSON object per line. It can be inspected e.g. as follows:
+
+```
+TODO
+```
 
 
 

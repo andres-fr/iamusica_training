@@ -78,40 +78,39 @@ class ConfDef:
     IGNORE_MEL: bool = False
 
 
-CONF = OmegaConf.structured(ConfDef())
-cli_conf = OmegaConf.from_cli()
-CONF = OmegaConf.merge(CONF, cli_conf)
-print("\n\nCONFIGURATION:")
-print(OmegaConf.to_yaml(CONF), end="\n\n\n")
-
-# derivative globals
-MAESTRO_METACLASS = {1: MetaMAESTROv1, 2: MetaMAESTROv2,
-                     3: MetaMAESTROv3}[CONF.MAESTRO_VERSION]
-HDF5_CHUNKLEN = round(CONF.HDF5_CHUNKLEN_SECONDS /
-                      (CONF.STFT_HOPSIZE / CONF.TARGET_SR))
-ROLL_HEIGHT = 3 + MidiToPianoRoll.NUM_MIDI_VALUES * 2
-MIDI_QUANT_SECS = CONF.STFT_HOPSIZE / CONF.TARGET_SR
-
-# output path
-os.makedirs(CONF.OUTPUT_DIR, exist_ok=True)
-if not CONF.IGNORE_MEL:
-    HDF5_MEL_OUTPATH = os.path.join(
-        CONF.OUTPUT_DIR,
-        HDF5PathManager.get_mel_hdf5_basename(
-            f"MAESTROv{CONF.MAESTRO_VERSION}", CONF.TARGET_SR,
-            CONF.STFT_WINSIZE, CONF.STFT_HOPSIZE, CONF.MELBINS,
-            CONF.MEL_FMIN, CONF.MEL_FMAX))
-HDF5_ROLL_OUTPATH = os.path.join(
-    CONF.OUTPUT_DIR,
-    HDF5PathManager.get_roll_hdf5_basename(
-        f"MAESTROv{CONF.MAESTRO_VERSION}", MIDI_QUANT_SECS,
-        MidiToPianoRoll.NUM_MIDI_VALUES, CONF.MIDI_SUS_EXTEND))
-
-
 # ##############################################################################
 # # MAIN ROUTINE
 # ##############################################################################
 if __name__ == "__main__":
+    CONF = OmegaConf.structured(ConfDef())
+    cli_conf = OmegaConf.from_cli()
+    CONF = OmegaConf.merge(CONF, cli_conf)
+    print("\n\nCONFIGURATION:")
+    print(OmegaConf.to_yaml(CONF), end="\n\n\n")
+
+    # derivative globals
+    MAESTRO_METACLASS = {1: MetaMAESTROv1, 2: MetaMAESTROv2,
+                         3: MetaMAESTROv3}[CONF.MAESTRO_VERSION]
+    HDF5_CHUNKLEN = round(CONF.HDF5_CHUNKLEN_SECONDS /
+                          (CONF.STFT_HOPSIZE / CONF.TARGET_SR))
+    ROLL_HEIGHT = 3 + MidiToPianoRoll.NUM_MIDI_VALUES * 2
+    MIDI_QUANT_SECS = CONF.STFT_HOPSIZE / CONF.TARGET_SR
+
+    # output path
+    os.makedirs(CONF.OUTPUT_DIR, exist_ok=True)
+    if not CONF.IGNORE_MEL:
+        HDF5_MEL_OUTPATH = os.path.join(
+            CONF.OUTPUT_DIR,
+            HDF5PathManager.get_mel_hdf5_basename(
+                f"MAESTROv{CONF.MAESTRO_VERSION}", CONF.TARGET_SR,
+                CONF.STFT_WINSIZE, CONF.STFT_HOPSIZE, CONF.MELBINS,
+                CONF.MEL_FMIN, CONF.MEL_FMAX))
+    HDF5_ROLL_OUTPATH = os.path.join(
+        CONF.OUTPUT_DIR,
+        HDF5PathManager.get_roll_hdf5_basename(
+            f"MAESTROv{CONF.MAESTRO_VERSION}", MIDI_QUANT_SECS,
+            MidiToPianoRoll.NUM_MIDI_VALUES, CONF.MIDI_SUS_EXTEND))
+
     all_maestro = MAESTRO_METACLASS(CONF.MAESTRO_INPATH,
                                     splits=MAESTRO_METACLASS.ALL_SPLITS,
                                     years=MAESTRO_METACLASS.ALL_YEARS)

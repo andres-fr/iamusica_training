@@ -17,23 +17,42 @@ from ..train import init_weights
 # ##############################################################################
 # # MAIN MODEL
 # ##############################################################################
-class OnsetVelocityNet(torch.nn.Module):
+class OnsetsAndVelocities(torch.nn.Module):
     """
-    A DNN to perform onset and velocity detection. Main features:
-    * Fully convolutional
-    * Dilated+residual convolutional blocks
-    * Multiple residual stages
-    * Batch+SubSpectral normalization, dropout and leaky ReLU
-    * Depthwise convolution to convert from spectrogram to key
+    Model from 'Onsets and Velocities: Affordable Real-Time Piano Transcription
+    Using Convolutional Neural Networks' (Fernandez, 2023).
     """
 
+    STEM_NUM_CAMS = 3
+    STEM_CAM_HDC_CHANS = 4
+    STEM_CAM_SE_BOTTLENECK = 8
+    STEM_CAM_KSIZES = ((3, 5), (3, 5), (3, 5), (3, 5))
+    STEM_CAM_DILATIONS = ((1, 1), (1, 2), (1, 3), (1, 4))
+    STEM_CAM_PADDINGS = ((1, 2), (1, 4), (1, 6), (1, 8))
+    #
+    NUM_ONSET_STAGES = 3
+    #
+    OSTAGE_NUM_CAMS = 3
+    OSTAGE_CAM_HDC_CHANS = 4
+    OSTAGE_CAM_SE_BOTTLENECK = 8
+    OSTAGE_CAM_KSIZES = ((1, 11), (1, 11), (1, 11))
+    OSTAGE_CAM_DILATIONS = ((1, 1), (1, 2), (1, 3))
+    OSTAGE_CAM_PADDINGS = ((0, 5), (0, 10), (0, 15))
+    #
+    VSTAGE_NUM_CAMS = 1
+    VSTAGE_CAM_HDC_CHANS = 4
+    VSTAGE_CAM_SE_BOTTLENECK = 8
+    VSTAGE_CAM_KSIZES = ((1, 11), (1, 11), (1, 11))
+    VSTAGE_CAM_DILATIONS = ((1, 1), (1, 2), (1, 3))
+    VSTAGE_CAM_PADDINGS = ((0, 5), (0, 10), (0, 15))
+
     @staticmethod
-    def get_cam_stage(in_chans, out_bins, conv1x1=(400, 200, 100),
-                      num_cam_bottlenecks=3, cam_hdc_chans=3,
+    def get_cam_stage(in_chans, out_bins, conv1x1head=(200, 200),
+                      num_cam_bottlenecks=3, cam_hdc_chans=4,
                       cam_se_bottleneck=8,
-                      cam_ksizes=((3, 21), (3, 17), (3, 13), (3, 9)),
-                      cam_dilations=((1, 1), (1, 2), (1, 3), (1, 4)),
-                      cam_paddings=((1, 10), (1, 16), (1, 18), (1, 16)),
+                      cam_ksizes=((1, 10), (1, 10), (1, 10)),
+                      cam_dilations=((1, 1), (1, 2), (1, 3)),
+                      cam_paddings=((0, 4), (0, 8), (0, 12)),
                       bn_momentum=0.1, leaky_relu_slope=0.1, dropout_p=0.1,
                       summary_width=3, conv1x1_kw=1):
         """
@@ -71,7 +90,7 @@ class OnsetVelocityNet(torch.nn.Module):
             torch.nn.BatchNorm2d(conv1x1[0], momentum=bn_momentum),
             get_relu(leaky_relu_slope),
             # from (b, first_hid, 1, t) to (b, out_bins, 1, t)
-            conv1x1net((*conv1x1, out_bins), bn_momentum,
+            conv1x1net((*conv1x1head, out_bins), bn_momentum,
                        last_layer_bn_relu=False,
                        dropout_drop_p=dropout_p,
                        leaky_relu_slope=leaky_relu_slope,
@@ -81,95 +100,63 @@ class OnsetVelocityNet(torch.nn.Module):
         #
         return cam  # (b, 1, out_bins, t)
 
-    def __init__(self, in_bins, out_bins, bn_momentum=0.1,
-                 conv1x1=(400, 200, 100),
+    def __init__(self, in_chans, in_height, out_height, bn_momentum=0.1,
+                 conv1x1head=(200, 200),
                  init_fn=torch.nn.init.kaiming_normal_,
                  se_init_bias=1.0, dropout_drop_p=0.1,
                  leaky_relu_slope=0.1):
         """
         """
         super().__init__()
-
         #
-        in_chans = 2
+        stem_chans = self.STEM_HDC_CHANS * len(self.STEM_KSIZES)
+        vel_in_chans = stem_chans + 1
         #
-        stem_num_cam_bottlenecks = 3
-        stem_hdc_chans = 4
-        stem_se_bottleneck = 8
+        self.specnorm = SubSpectralNorm(
+            in_chans, in_height, in_height, bn_momentum)
         #
-        stem_ksizes = ((3, 5), (3, 5), (3, 5), (3, 5), (3, 5))
-        stem_dilations = ((1, 1), (1, 2), (1, 3), (1, 4), (1, 5))
-        stem_paddings = ((1, 2), (1, 4), (1, 6), (1, 8), (1, 10))
-        stem_inner_chans = stem_hdc_chans * len(stem_ksizes)
-        stem_out_chans = stem_inner_chans
-        # #
-        cam_num_bottlenecks = 3
-        cam_hdc_chans = 4
-        cam_se_bottleneck = 8
-        #
-        cam_ksizes = ((1, 21), (1, 17), (1, 13), (1, 9))
-        cam_dilations = ((1, 1), (1, 2), (1, 3), (1, 4))
-        cam_paddings = ((0, 10), (0, 16), (0, 18), (0, 16))
-        # #
-        num_refiner_stages = 3
-        refiner_num_bottlenecks = 2
-        refiner_hdc_chans = 3
-        refiner_se_bottleneck = 8
-        #
-        refiner_ksizes = ((1, 9), (1, 7), (1, 5))
-        refiner_dilations = ((1, 1), (1, 2), (1, 3))
-        refiner_paddings = ((0, 4), (0, 6), (0, 6))
-        #
-        self.specnorm = SubSpectralNorm(2, in_bins, in_bins, bn_momentum)
         self.stem = torch.nn.Sequential(
             # lift in chans into stem chans
-            torch.nn.Conv2d(in_chans, stem_inner_chans, (3, 3),
+            torch.nn.Conv2d(in_chans, stem_chans, (3, 3),
                             padding=(1, 1), bias=False),
-            SubSpectralNorm(stem_inner_chans, in_bins, in_bins, bn_momentum),
+            torch.nn.BatchNorm2d(stem_chans, momentum=bn_momentum),
             get_relu(leaky_relu_slope),
-            # series of stem CAMs. Output: (b, stem_inner_chans, mels, t)
+            # series of stem CAMs. Output: (b, stem_chans, mels, t)
             *[torch.nn.Sequential(
                 ContextAwareModule(
-                    stem_inner_chans, stem_hdc_chans, stem_se_bottleneck,
-                    stem_ksizes, stem_dilations, stem_paddings, bn_momentum),
-                SubSpectralNorm(
-                    stem_inner_chans, in_bins, in_bins, bn_momentum),
+                    stem_chans, self.STEM_CAM_HDC_CHANS,
+                    self.STEM_CAM_SE_BOTTLENECK, self.STEM_CAM_KSIZES,
+                    self.STEM_CAM_DILATIONS, self.STEM_CAM_PADDINGS,
+                    bn_momentum),
+                torch.nn.BatchNorm2d(stem_chans, momentum=bn_momentum),
                 get_relu(leaky_relu_slope))
-              for _ in range(stem_num_cam_bottlenecks)],
-            # reshape to ``(b, stem_inner_chans, keys, t)``
+              for _ in range(self.STEM_NUM_CAMS)],
+            # reshape to ``(b, stem_chans, keys, t)``
             DepthwiseConv2d(
-                stem_inner_chans, stem_out_chans, in_bins, out_bins,
+                stem_chans, stem_chans, in_height, out_height,
                 kernel_width=1, bias=False),
-            torch.nn.BatchNorm2d(stem_out_chans, momentum=bn_momentum),
+            torch.nn.BatchNorm2d(stem_chans, momentum=bn_momentum),
             get_relu(leaky_relu_slope))
         #
-        self.first_stage = self.get_cam_stage(
-             stem_out_chans, out_bins, conv1x1,
-             cam_num_bottlenecks, cam_hdc_chans, cam_se_bottleneck,
-             cam_ksizes, cam_dilations, cam_paddings,
-             bn_momentum, leaky_relu_slope, dropout_drop_p)
+        self.onset_stages = torch.nn.ModuleList(
+            [torch.nn.Sequential(
+                self.get_cam_stage(
+                    stem_chans, out_height, conv1x1head,
+                    self.OSTAGE_NUM_CAMS, self.OSTAGE_CAM_HDC_CHANS,
+                    self.OSTAGE_CAM_SE_BOTTLENECK, self.OSTAGE_CAM_KSIZES,
+                    self.OSTAGE_CAM_DILATIONS, self.OSTAGE_CAM_PADDINGS,
+                    bn_momentum, leaky_relu_slope, dropout_drop_p),
+                SubSpectralNorm(1, out_height, out_height, bn_momentum))
+             for _ in range(num_onset_stages)])
         #
-        self.refiner_stages = torch.nn.ModuleList(
-            [self.get_cam_stage(
-                stem_out_chans, out_bins, conv1x1,
-                refiner_num_bottlenecks, refiner_hdc_chans,
-                refiner_se_bottleneck,
-                refiner_ksizes, refiner_dilations, refiner_paddings,
-                bn_momentum, leaky_relu_slope, dropout_drop_p)
-             for _ in range(num_refiner_stages)])
-
         self.velocity_stage = torch.nn.Sequential(
-            SubSpectralNorm(
-                stem_out_chans + 1, out_bins, out_bins, bn_momentum),
             self.get_cam_stage(
-                stem_out_chans + 1, out_bins, [out_bins * 2, out_bins],
-                num_cam_bottlenecks=1, cam_hdc_chans=4,
-                cam_ksizes=((1, 3), (1, 3), (1, 3), (1, 3)),
-                cam_dilations=((1, 1), (1, 2), (1, 3), (1, 4)),
-                cam_paddings=((0, 1), (0, 2), (0, 3), (0, 4)),
-                bn_momentum=bn_momentum, leaky_relu_slope=leaky_relu_slope,
-                dropout_p=dropout_drop_p, summary_width=3),
-            SubSpectralNorm(1, out_bins, out_bins, bn_momentum))
+                    vel_in_chans, out_height, conv1x1head,
+                    self.VSTAGE_NUM_CAMS, self.VSTAGE_CAM_HDC_CHANS,
+                    self.VSTAGE_CAM_SE_BOTTLENECK, self.VSTAGE_CAM_KSIZES,
+                    self.VSTAGE_CAM_DILATIONS, self.VSTAGE_CAM_PADDINGS,
+                    bn_momentum, leaky_relu_slope, dropout_drop_p),
+            SubSpectralNorm(1, out_height, out_height, bn_momentum))
 
         # initialize weights
         if init_fn is not None:
@@ -204,11 +191,11 @@ class OnsetVelocityNet(torch.nn.Module):
         x = self.specnorm(x)
         #
         stem_out = self.stem(x)  # (b, stem_ch, keys, t-1)
-        x = self.first_stage(stem_out)  # (b, 1, keys, t-1)
+        x = self.onset_stages[0](stem_out)  # (b, 1, keys, t-1)
         #
         x_stages = [x]
-        for ref in self.refiner_stages:
-            x = ref(stem_out) + x_stages[-1]  # residual instead of concat
+        for stg in self.onset_stages[1:]:
+            x = stg(stem_out) + x_stages[-1]  # residual stages
             x_stages.append(x)
         for st in x_stages:
             st.squeeze_(1)

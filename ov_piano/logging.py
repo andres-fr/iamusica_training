@@ -15,6 +15,7 @@ import pytz
 import logging
 from typing import Optional
 import socket
+import json
 #
 # ignore "mypy" import error for coloredlogs.
 # see https://mypy.readthedocs.io/en/latest/running_mypy.html#missing-imports
@@ -135,3 +136,18 @@ class ColorLogger:
 
     def critical(self, *args, **kwargs) -> None:
         self.logger.critical(*args, **kwargs)
+
+
+class JsonColorLogger(ColorLogger):
+    """
+    Like its parent class but includes a ``loj`` (log JSON) method that logs
+    a JSON object in the form ``[header, body]``.
+    """
+    FORMAT_STR = ("""["%(asctime)s.%(msecs)03d", %(message)s]""")
+    DATE_FORMAT = "%Y-%m-%d_%H:%M:%S"
+
+
+    def loj(self, header, body):
+        """
+        """
+        self.info(json.dumps((header, body)))
