@@ -24,12 +24,11 @@ import torch
 import numpy as np
 # import matplotlib.pyplot as plt
 #
-from iamusica_ml import HDF5PathManager
-from iamusica_ml.utils import IncrementalHDF5
-from iamusica_ml.utils import TorchWavToLogmel, torch_load_resample_audio
-from iamusica_ml.data.maestro import MetaMAESTROv1, MetaMAESTROv2, \
-    MetaMAESTROv3
-from iamusica_ml.data.midi import MaestroMidiParser, MidiToPianoRoll
+from ov_piano import HDF5PathManager
+from ov_piano.utils import IncrementalHDF5
+from ov_piano.utils import TorchWavToLogmel, torch_load_resample_audio
+from ov_piano.data.maestro import MetaMAESTROv1, MetaMAESTROv2, MetaMAESTROv3
+from ov_piano.data.midi import MaestroMidiParser, MidiToPianoRoll
 
 
 # ##############################################################################

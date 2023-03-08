@@ -32,18 +32,18 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 import pandas as pd
-# import matplotlib.pyplot as plt
 #
-from iamusica_ml import PIANO_MIDI_RANGE, HDF5PathManager
-from iamusica_ml.utils import load_model
-from iamusica_ml.logging import ColorLogger
-from iamusica_ml.data.maestro import \
-    MetaMAESTROv1, MetaMAESTROv2, MetaMAESTROv3
-from iamusica_ml.data.maestro import MelMaestro
-from iamusica_ml.models import OnsetVelocityNet
-from iamusica_ml.inference import strided_inference, OnsetVelocityNmsDecoder
-from iamusica_ml.eval import GtLoaderMaestro
-from iamusica_ml.eval import threshold_eval_single_file
+from ov_piano import PIANO_MIDI_RANGE, HDF5PathManager
+from ov_piano.utils import load_model
+from ov_piano.logging import ColorLogger
+from ov_piano.data.maestro import MetaMAESTROv1, MetaMAESTROv2, MetaMAESTROv3
+from ov_piano.data.maestro import MelMaestro
+import ov_piano.models
+from ov_piano.inference import strided_inference, OnsetVelocityNmsDecoder
+from ov_piano.eval import GtLoaderMaestro
+from ov_piano.eval import threshold_eval_single_file
+
+# import matplotlib.pyplot as plt
 
 
 # ##############################################################################
@@ -103,14 +103,17 @@ class ConfDef:
     #
     HDF5_MEL_PATH: str = os.path.join(
         "datasets",
-        "MAESTROv3_logmel_sr=16000_stft=2048w384h_mel=250(50-8000).h5")
+        "MAESTROv3_logmel_sr=16000_stft=2048w384h_mel=229(50-8000).h5")
     HDF5_ROLL_PATH: str = os.path.join(
         "datasets",
         "MAESTROv3_roll_quant=0.024_midivals=128_extendsus=True.h5")
     SNAPSHOT_INPATH: str = MISSING
     #
+    CONV1X1: List[int] = (200, 200)
+    #
     XV_TAKE_ONE_EVERY: int = 5
-    SEARCH_THRESHOLDS: List[float] = (0.77,)
+    SEARCH_THRESHOLDS: List[float] = (0.70, 0.71, 0.72, 0.73, 0.74, 0.75,
+                                      0.76, 0.77, 0.78, 0.79, 0.80)
     SEARCH_SHIFTS: List[float] = (-0.01,)
     #
     DECODER_GAUSS_STD: float = 1
@@ -123,35 +126,35 @@ class ConfDef:
     INFERENCE_CHUNK_OVERLAP: float = 11
 
 
-CONF = OmegaConf.structured(ConfDef())
-cli_conf = OmegaConf.from_cli()
-CONF = OmegaConf.merge(CONF, cli_conf)
-
-# derivative globals + parse HDF5 filenames and ensure they are consistent
-(DATASET_NAME, SAMPLERATE, WINSIZE, HOPSIZE,
- MELBINS, FMIN, FMAX) = HDF5PathManager.parse_mel_hdf5_basename(
-    os.path.basename(CONF.HDF5_MEL_PATH))
-roll_params = HDF5PathManager.parse_roll_hdf5_basename(
-    os.path.basename(CONF.HDF5_ROLL_PATH))
-SECS_PER_FRAME = HOPSIZE / SAMPLERATE
-#
-CHUNK_SIZE = round(CONF.INFERENCE_CHUNK_SIZE / SECS_PER_FRAME)
-CHUNK_OVERLAP = round(CONF.INFERENCE_CHUNK_OVERLAP / SECS_PER_FRAME)
-#
-assert DATASET_NAME == roll_params[0], "Inconsistent HDF5 datasets?"
-assert SECS_PER_FRAME == roll_params[1], "Inconsistent roll quantization?"
-assert (CHUNK_OVERLAP % 2) == 0, f"Only even overlap allowed! {CHUNK_OVERLAP}"
-#
-METAMAESTRO_CLASS = {1: MetaMAESTROv1, 2: MetaMAESTROv2,
-                     3: MetaMAESTROv3}[CONF.MAESTRO_VERSION]
-TXT_LOG_OUTDIR = os.path.join(CONF.OUTPUT_DIR, "txt_logs")
-os.makedirs(TXT_LOG_OUTDIR, exist_ok=True)
-
 
 # ##############################################################################
 # # MAIN LOOP INITIALIZATION
 # ##############################################################################
 if __name__ == "__main__":
+    CONF = OmegaConf.structured(ConfDef())
+    cli_conf = OmegaConf.from_cli()
+    CONF = OmegaConf.merge(CONF, cli_conf)
+
+    # derivative globals + parse HDF5 filenames and ensure they are consistent
+    (DATASET_NAME, SAMPLERATE, WINSIZE, HOPSIZE,
+     MELBINS, FMIN, FMAX) = HDF5PathManager.parse_mel_hdf5_basename(
+        os.path.basename(CONF.HDF5_MEL_PATH))
+    roll_params = HDF5PathManager.parse_roll_hdf5_basename(
+        os.path.basename(CONF.HDF5_ROLL_PATH))
+    SECS_PER_FRAME = HOPSIZE / SAMPLERATE
+    #
+    CHUNK_SIZE = round(CONF.INFERENCE_CHUNK_SIZE / SECS_PER_FRAME)
+    CHUNK_OVERLAP = round(CONF.INFERENCE_CHUNK_OVERLAP / SECS_PER_FRAME)
+    #
+    assert DATASET_NAME == roll_params[0], "Inconsistent HDF5 datasets?"
+    assert SECS_PER_FRAME == roll_params[1], "Inconsistent roll quantization?"
+    assert (CHUNK_OVERLAP % 2) == 0, f"Only even overlap allowed! {CHUNK_OVERLAP}"
+    #
+    METAMAESTRO_CLASS = {1: MetaMAESTROv1, 2: MetaMAESTROv2,
+                         3: MetaMAESTROv3}[CONF.MAESTRO_VERSION]
+    TXT_LOG_OUTDIR = os.path.join(CONF.OUTPUT_DIR, "txt_logs")
+    os.makedirs(TXT_LOG_OUTDIR, exist_ok=True)
+
     txt_logger = ColorLogger(os.path.basename(__file__), TXT_LOG_OUTDIR)
     txt_logger.info("\n\nCONFIGURATION:\n" + OmegaConf.to_yaml(CONF) + "\n\n")
 
@@ -188,11 +191,13 @@ if __name__ == "__main__":
     key_beg, key_end = PIANO_MIDI_RANGE
     num_piano_keys = key_end - key_beg
     #
-    model = OnsetVelocityNet(
-        in_bins=num_mels, out_bins=num_piano_keys,
-        conv1x1=(400, 200, 100),
-        leaky_relu_slope=0.1,
-        bn_momentum=0.85).to(CONF.DEVICE)
+    model = OnsetsAndVelocities(
+        in_chans=2,  # X and time_derivative(X)
+        in_height=num_mels, out_height=num_piano_keys,
+        conv1x1head=CONF.CONV1X1,
+        bn_momentum=CONF.BATCH_NORM,
+        leaky_relu_slope=CONF.LEAKY_RELU_SLOPE,
+        dropout_drop_p=CONF.DROPOUT).to(CONF.DEVICE)
     load_model(model, CONF.SNAPSHOT_INPATH, eval_phase=True)
     # instantiate decoder
     decoder = OnsetVelocityNmsDecoder(

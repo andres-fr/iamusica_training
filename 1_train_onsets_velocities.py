@@ -25,20 +25,19 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 import pandas as pd
-# import matplotlib.pyplot as plt
 #
-from iamusica_ml import PIANO_MIDI_RANGE, HDF5PathManager
-from iamusica_ml.utils import ModelSaver, load_model, breakpoint_json, \
-    set_seed
-from iamusica_ml.logging import JsonColorLogger
-from iamusica_ml.data.maestro import \
-    MetaMAESTROv1, MetaMAESTROv2, MetaMAESTROv3
-from iamusica_ml.data.maestro import MelMaestro, MelMaestroChunks
-from iamusica_ml.models.ov import OnsetsAndVelocities
-from iamusica_ml.utils import MaskedBCEWithLogitsLoss
-from iamusica_ml.optimizers import AdamWR
-from iamusica_ml.inference import strided_inference, OnsetVelocityNmsDecoder
-from iamusica_ml.eval import GtLoaderMaestro, eval_note_events
+from ov_piano import PIANO_MIDI_RANGE, HDF5PathManager
+from ov_piano.utils import ModelSaver, load_model, breakpoint_json, set_seed
+from ov_piano.logging import JsonColorLogger
+from ov_piano.data.maestro import MetaMAESTROv1, MetaMAESTROv2, MetaMAESTROv3
+from ov_piano.data.maestro import MelMaestro, MelMaestroChunks
+from ov_piano.models.ov import OnsetsAndVelocities
+from ov_piano.utils import MaskedBCEWithLogitsLoss
+from ov_piano.optimizers import AdamWR
+from ov_piano.inference import strided_inference, OnsetVelocityNmsDecoder
+from ov_piano.eval import GtLoaderMaestro, eval_note_events
+
+# import matplotlib.pyplot as plt
 
 
 # ##############################################################################
@@ -65,12 +64,12 @@ class ConfDef:
       reduce if insufficient memory.
 
     :cvar OPTIMIZER: Supported are SGDR and AdamWR (default)
-    :cvar LR_MAX: Initial learning rate for the SGDR optimizer
-    :cvar LR_PERIOD: Number of steps per LR cycle for the SGDR optimizer
-    :cvar LR_DECAY: Each SGDR cycle, the max and min LR are multiplied by this
-    :cvar LR_SLOWDOWN: Each SGDR cycle, the duration is multiplied by this
-    :cvar MOMENTUM: Gradient momentum for the SGDR optimizer
-    :cvar WEIGHT_DECAY: L2 regularization factor for the SGDR optimizer
+    :cvar LR_MAX: Initial learning rate for the optimizer
+    :cvar LR_PERIOD: Number of steps per LR cycle for the optimizer
+    :cvar LR_DECAY: Each LR cycle, the max and min LR are multiplied by this
+    :cvar LR_SLOWDOWN: Each LR cycle, the duration is multiplied by this
+    :cvar MOMENTUM: Gradient momentum for the optimizer
+    :cvar WEIGHT_DECAY: L2 regularization factor for the optimizer
 
     :cvar BATCH_NORM: Momentum for the (batch, spectral) normalization layers
     :cvar DROPOUT: Probability of dropping a weight
@@ -110,12 +109,13 @@ class ConfDef:
       Note that XV will be performed once per threshold, so the more, the
       slower training, but also better chances of assessing performance right.
     """
-
+    # general
     DEVICE: str = "cuda" if torch.cuda.is_available() else "cpu"
+    RANDOM_SEED: Optional[int] = None
+    # I/O
+    OUTPUT_DIR: str = "out"
     MAESTRO_PATH: str = os.path.join("datasets", "maestro", "maestro-v3.0.0")
     MAESTRO_VERSION: int = 3
-    OUTPUT_DIR: str = "out"
-    #
     HDF5_MEL_PATH: str = os.path.join(
         "datasets",
         "MAESTROv3_logmel_sr=16000_stft=2048w384h_mel=229(50-8000).h5")
@@ -124,24 +124,20 @@ class ConfDef:
         "MAESTROv3_roll_quant=0.024_midivals=128_extendsus=True.h5")
     SNAPSHOT_INPATH: Optional[str] = None
     # data loader
-    TRAIN_BS: int = 30
+    TRAIN_BS: int = 40
     TRAIN_BATCH_SECS: float = 5.0
     DATALOADER_WORKERS: int = 8
-    # model
-    MODEL: str = "OnsetVelocityNetSBN"
+    # model/optimizer
     CONV1X1: List[int] = (200, 200)
     # optimizer
-    OPTIMIZER: str = "AdamWR"
-    LR_MAX: float = 0.005
-    LR_WARMUP: float = 0.1
-    # LR_MIN: float = 1e-5
+    LR_MAX: float = 0.008
+    LR_WARMUP: float = 0.5
     LR_PERIOD: int = 1000
     LR_DECAY: float = 0.975
     LR_SLOWDOWN: float = 1.0
-    MOMENTUM: float = 0.85
-    WEIGHT_DECAY: float = 0.0
-    # regularization layers
-    BATCH_NORM: float = 0.85
+    MOMENTUM: float = 0.95
+    WEIGHT_DECAY: float = 0.0003
+    BATCH_NORM: float = 0.95
     DROPOUT: float = 0.15
     LEAKY_RELU_SLOPE: Optional[float] = 0.1
     # loss
@@ -151,9 +147,6 @@ class ConfDef:
     # decoder
     DECODER_GAUSS_STD: float = 1
     DECODER_GAUSS_KSIZE: int = 11
-    # tolerances
-    XV_TOLERANCE_SECS: float = 0.05
-    XV_TOLERANCE_VEL: float = 0.1
     # training loop
     NUM_EPOCHS: int = 10
     TRAIN_LOG_EVERY: int = 10
@@ -161,8 +154,9 @@ class ConfDef:
     XV_CHUNK_SIZE: float = 600
     XV_CHUNK_OVERLAP: float = 2.5
     XV_THRESHOLDS: List[float] = (0.7, 0.725, 0.75, 0.775, 0.8)
-    #
-    RANDOM_SEED: Optional[int] = None
+    # xv tolerances
+    XV_TOLERANCE_SECS: float = 0.05
+    XV_TOLERANCE_VEL: float = 0.1
 
 
 # ##############################################################################
@@ -173,15 +167,10 @@ if __name__ == "__main__":
     cli_conf = OmegaConf.from_cli()
     CONF = OmegaConf.merge(CONF, cli_conf)
 
-
     # if no seed is given, take a random one
     if CONF.RANDOM_SEED is None:
         CONF.RANDOM_SEED = random.randint(0, 1e7)
     set_seed(CONF.RANDOM_SEED)
-
-    assert CONF.OPTIMIZER in {"AdamWR", "SGDR"}, "Unsupported optimizer!"
-    model_class = getattr(iamusica_ml.models, CONF.MODEL)
-
 
     # derivative globals + parse HDF5 filenames and ensure they are consistent
     (DATASET_NAME, SAMPLERATE, WINSIZE, HOPSIZE,
@@ -207,13 +196,9 @@ if __name__ == "__main__":
     os.makedirs(MODEL_SNAPSHOT_OUTDIR, exist_ok=True)
     os.makedirs(TXT_LOG_OUTDIR, exist_ok=True)
 
-
-
-
-    txt_logger = JsonColorLogger(f"[{os.path.basename(__file__)}]", TXT_LOG_OUTDIR)
+    txt_logger = JsonColorLogger(
+        f"[{os.path.basename(__file__)}]", TXT_LOG_OUTDIR)
     txt_logger.loj("PARAMETERS", OmegaConf.to_container(CONF))
-
-
 
     # datasets and dataloaders
     metamaestro_train = METAMAESTRO_CLASS(
@@ -233,8 +218,8 @@ if __name__ == "__main__":
         CONF.MAESTRO_PATH, splits=["validation"],
         years=METAMAESTRO_CLASS.ALL_YEARS)
     # shorten xv set to speed up cross validation times
-    # txt_logger.critical("SHORTENING XV SPLIT FOR FASTER CROSSVALIDATION!")
-    txt_logger.loj("WARNING", "shortening xv split for faster crossvalidation!")
+    txt_logger.loj("WARNING",
+                   "shortening xv split for faster crossvalidation!")
     metamaestro_xv.data = metamaestro_xv.data[::5]
     #
     maestro_xv = MelMaestro(
@@ -249,17 +234,24 @@ if __name__ == "__main__":
     key_beg, key_end = PIANO_MIDI_RANGE
     num_piano_keys = key_end - key_beg
 
+
+(self, in_chans, in_height, out_height, conv1x1head=(200, 200),
+                 bn_momentum=0.1, leaky_relu_slope=0.1, dropout_drop_p=0.1,
+                 init_fn=torch.nn.init.kaiming_normal_, se_init_bias=1.0):
+
     # DNN (instantiation+serialization)
-    model = model_class(
-        in_bins=num_mels, out_bins=num_piano_keys,
-        conv1x1=CONF.CONV1X1,
-        dropout_drop_p=CONF.DROPOUT,
+    model = OnsetsAndVelocities(
+        in_chans=2,  # X and time_derivative(X)
+        in_height=num_mels, out_height=num_piano_keys,
+        conv1x1head=CONF.CONV1X1,
+        bn_momentum=CONF.BATCH_NORM,
         leaky_relu_slope=CONF.LEAKY_RELU_SLOPE,
-        bn_momentum=CONF.BATCH_NORM).to(CONF.DEVICE)
+        dropout_drop_p=CONF.DROPOUT).to(CONF.DEVICE)
     if CONF.SNAPSHOT_INPATH is not None:
         load_model(model, CONF.SNAPSHOT_INPATH, eval_phase=False)
-    model_saver = ModelSaver(model, MODEL_SNAPSHOT_OUTDIR,
-                             log_fn=lambda msg: txt_logger.loj("SAVED_MODEL", msg))
+    model_saver = ModelSaver(
+        model, MODEL_SNAPSHOT_OUTDIR,
+        log_fn=lambda msg: txt_logger.loj("SAVED_MODEL", msg))
 
     # decoder
     decoder = OnsetVelocityNmsDecoder(
@@ -278,29 +270,18 @@ if __name__ == "__main__":
     trainable_params = model.parameters() if CONF.TRAINABLE_ONSETS else \
         model.velocity_stage.parameters()
 
+    opt_hpars = {
+        "lr_max": CONF.LR_MAX, "lr": CONF.LR_MAX,
+        "lr_period": CONF.LR_PERIOD, "lr_decay": CONF.LR_DECAY,
+        "lr_slowdown": CONF.LR_SLOWDOWN, "cycle_end_hook_fn": model_saver,
+        "cycle_warmup": CONF.LR_WARMUP, "weight_decay": CONF.WEIGHT_DECAY,
+        "betas": (0.9, 0.999), "eps": 1e-8, "amsgrad": False}
+    opt = AdamWR(trainable_params, **opt_hpars)
 
 
-    opt_hpars = {"lr_max": CONF.LR_MAX, "lr": CONF.LR_MAX, # "lr_min": CONF.LR_MIN,
-                 "lr_period": CONF.LR_PERIOD, "lr_decay": CONF.LR_DECAY,
-                 "lr_slowdown": CONF.LR_SLOWDOWN, "cycle_end_hook_fn": model_saver,
-                 "cycle_warmup": CONF.LR_WARMUP, "weight_decay": CONF.WEIGHT_DECAY}
-
-    if CONF.OPTIMIZER == "SGDR":
-        opt_class = SGDR
-        opt_hpars = {**opt_hpars,
-                     "momentum": CONF.MOMENTUM, "dampening": 0, "nesterov": False}
-    elif CONF.OPTIMIZER == "AdamWR":
-        opt_class = AdamWR
-        opt_hpars = {**opt_hpars,
-                     "betas": (0.9, 0.999), "eps": 1e-8, "amsgrad": False}
-    else:
-        raise RuntimeError(f"Unsupported optimizer: {CONF.OPTIMIZER}")
-    opt = opt_class(trainable_params, **opt_hpars)
-
-
-    # ##############################################################################
+    # ##########################################################################
     # # XV HELPERS
-    # ##############################################################################
+    # ##########################################################################
     def model_inference(x):
         """
         Convenience wrapper around the DNN to ensure output and input sequences
@@ -314,13 +295,14 @@ if __name__ == "__main__":
 
     def xv_file(mel, md, thresholds=[0.5], verbose=False):
         """
-        Convenience function to perform cross-validation on a signle file:
+        Convenience function to perform cross-validation on a single file:
         1. Loads ground-truth event sequence from given MIDI
-        2. Performs strided inference on given mel, and extracts predicted event
-          sequence
-        3. Computes XV metrics for every given threshold, once for onsets only and
-          once for onsets+velocities
-        4. Returns ``(o_results, ov_results)`` as lists with one elt per thresh
+        2. Performs strided inference on given mel, and extracts predicted
+          event sequence
+        3. Computes XV metrics for every given threshold, once for onsets only
+          and once for onsets+velocities
+        4. Returns ``(o_results, ov_results)`` as lists with one element per
+          threshold
         """
         # gather ground truth
         df_gt = xv_gt_loader(md)[0]
@@ -373,23 +355,24 @@ if __name__ == "__main__":
             results_vel.append((md[0], prec, rec, f1))
             if verbose:
                 txt_logger.loj(
-                    "XV_ONSET_VEL", {"threshold": t, "P": prec, "R": rec, "F1": f1})
+                    "XV_ONSET_VEL",
+                    {"threshold": t, "P": prec, "R": rec, "F1": f1})
         #
         return results, results_vel
 
 
-    # ##############################################################################
+    # ##########################################################################
     # # TRAINING LOOP
-    # ##############################################################################
+    # ##########################################################################
     txt_logger.loj("MODEL_INFO", {"class": model.__class__.__name__})
     global_step = 1
     onsets_beg, onsets_end = maestro_train.ONSETS_RANGE
     frames_beg, frames_end = maestro_train.FRAMES_RANGE
     for epoch in range(1, CONF.NUM_EPOCHS + 1):
         for i, (logmels, rolls, metas) in enumerate(train_dl):
-            # ######################################################################
+            # ##################################################################
             # # CROSS VALIDATION
-            # ######################################################################
+            # ##################################################################
             if (global_step % CONF.XV_EVERY) == 0:
                 model.eval()
                 #
@@ -407,9 +390,10 @@ if __name__ == "__main__":
                         xv_results.append(xv_result)
                         xv_results_vel.append(xv_result_vel)
                 # compare non-vel results and report best
-                xv_dfs = [(t, pd.DataFrame(x,
-                                           columns=["filename", "P", "R", "F1"]))
-                          for t, x in zip(CONF.XV_THRESHOLDS, zip(*xv_results))]
+                xv_dfs = [(t, pd.DataFrame(
+                    x, columns=["filename", "P", "R", "F1"]))
+                          for t, x in zip(CONF.XV_THRESHOLDS,
+                                          zip(*xv_results))]
                 f1_avgs = []
                 for t, df in xv_dfs:
                     averages = [f"AVERAGES (t={t})",
@@ -437,9 +421,11 @@ if __name__ == "__main__":
                 txt_logger.loj("XV_SUMMARY", {
                     "epoch": epoch,
                     "global_step": global_step,
-                    "best_f1_o_thresh": CONF.XV_THRESHOLDS[int(best_f1_idx)],
+                    "best_f1_o_thresh": CONF.XV_THRESHOLDS[
+                        int(best_f1_idx)],
                     "best_f1_o": best_f1,
-                    "best_f1_v_thresh": CONF.XV_THRESHOLDS[int(best_f1_idx_vel)],
+                    "best_f1_v_thresh": CONF.XV_THRESHOLDS[
+                        int(best_f1_idx_vel)],
                     "best_f1_v": best_f1_vel})
                 model_saver(
                     f"step={global_step}_f1={best_f1:.4f}__{best_f1_vel:.4f}")
@@ -447,16 +433,16 @@ if __name__ == "__main__":
                 torch.cuda.empty_cache()
                 model.train()
 
-            # ######################################################################
+            # ##################################################################
             # # TRAINING
-            # ######################################################################
+            # ##################################################################
             with torch.no_grad():
                 logmels = logmels.to(CONF.DEVICE)
                 rolls = rolls[:, :, 1:].to(CONF.DEVICE)
                 onsets = rolls[:, onsets_beg:onsets_end][:, key_beg:key_end]
                 # frames = rolls[:, frames_beg:frames_end][:, key_beg:key_end]
 
-                #################################################################
+                ################################################################
                 double_onsets = onsets.clone()
                 torch.maximum(onsets[..., :-1], onsets[..., 1:],
                               out=double_onsets[..., 1:])

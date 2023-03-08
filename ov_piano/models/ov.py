@@ -100,11 +100,9 @@ class OnsetsAndVelocities(torch.nn.Module):
         #
         return cam  # (b, 1, out_bins, t)
 
-    def __init__(self, in_chans, in_height, out_height, bn_momentum=0.1,
-                 conv1x1head=(200, 200),
-                 init_fn=torch.nn.init.kaiming_normal_,
-                 se_init_bias=1.0, dropout_drop_p=0.1,
-                 leaky_relu_slope=0.1):
+    def __init__(self, in_chans, in_height, out_height, conv1x1head=(200, 200),
+                 bn_momentum=0.1, leaky_relu_slope=0.1, dropout_drop_p=0.1,
+                 init_fn=torch.nn.init.kaiming_normal_, se_init_bias=1.0):
         """
         """
         super().__init__()
@@ -147,7 +145,7 @@ class OnsetsAndVelocities(torch.nn.Module):
                     self.OSTAGE_CAM_DILATIONS, self.OSTAGE_CAM_PADDINGS,
                     bn_momentum, leaky_relu_slope, dropout_drop_p),
                 SubSpectralNorm(1, out_height, out_height, bn_momentum))
-             for _ in range(num_onset_stages)])
+             for _ in range(self.NUM_ONSET_STAGES)])
         #
         self.velocity_stage = torch.nn.Sequential(
             self.get_cam_stage(
@@ -158,7 +156,7 @@ class OnsetsAndVelocities(torch.nn.Module):
                     bn_momentum, leaky_relu_slope, dropout_drop_p),
             SubSpectralNorm(1, out_height, out_height, bn_momentum))
 
-        # initialize weights
+        # initialize parameters
         if init_fn is not None:
             self.apply(lambda module: init_weights(
                 module, init_fn, bias_val=0.0))
