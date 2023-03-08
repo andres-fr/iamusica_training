@@ -127,7 +127,6 @@ class ConfDef:
     INFERENCE_CHUNK_OVERLAP: float = 11
 
 
-
 # ##############################################################################
 # # MAIN LOOP INITIALIZATION
 # ##############################################################################
@@ -149,7 +148,8 @@ if __name__ == "__main__":
     #
     assert DATASET_NAME == roll_params[0], "Inconsistent HDF5 datasets?"
     assert SECS_PER_FRAME == roll_params[1], "Inconsistent roll quantization?"
-    assert (CHUNK_OVERLAP % 2) == 0, f"Only even overlap allowed! {CHUNK_OVERLAP}"
+    assert (CHUNK_OVERLAP % 2) == 0, \
+        f"Only even overlap allowed! {CHUNK_OVERLAP}"
     #
     METAMAESTRO_CLASS = {1: MetaMAESTROv1, 2: MetaMAESTROv2,
                          3: MetaMAESTROv3}[CONF.MAESTRO_VERSION]

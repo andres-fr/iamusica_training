@@ -273,7 +273,6 @@ if __name__ == "__main__":
         "betas": (0.9, 0.999), "eps": 1e-8, "amsgrad": False}
     opt = AdamWR(trainable_params, **opt_hpars)
 
-
     # ##########################################################################
     # # XV HELPERS
     # ##########################################################################
@@ -286,7 +285,6 @@ if __name__ == "__main__":
         probs = F.pad(torch.sigmoid(probs[-1]), (1, 0))
         vels = F.pad(torch.sigmoid(vels), (1, 0))
         return probs, vels
-
 
     def xv_file(mel, md, thresholds=[0.5], verbose=False):
         """
@@ -326,7 +324,8 @@ if __name__ == "__main__":
             results.append((md[0], prec, rec, f1))
             if verbose:
                 txt_logger.loj(
-                    "XV_ONSET", {"threshold": t, "P": prec, "R": rec, "F1": f1})
+                    "XV_ONSET",
+                    {"threshold": t, "P": prec, "R": rec, "F1": f1})
         # evaluate for all thresholds, taking velocity into account
         results_vel = []
         for t in thresholds:
@@ -354,7 +353,6 @@ if __name__ == "__main__":
                     {"threshold": t, "P": prec, "R": rec, "F1": f1})
         #
         return results, results_vel
-
 
     # ##########################################################################
     # # TRAINING LOOP
@@ -437,7 +435,7 @@ if __name__ == "__main__":
                 onsets = rolls[:, onsets_beg:onsets_end][:, key_beg:key_end]
                 # frames = rolls[:, frames_beg:frames_end][:, key_beg:key_end]
 
-                ################################################################
+                # ##############################################################
                 double_onsets = onsets.clone()
                 torch.maximum(onsets[..., :-1], onsets[..., 1:],
                               out=double_onsets[..., 1:])
@@ -454,7 +452,7 @@ if __name__ == "__main__":
                 # idx = 0; plt.clf(); plt.imshow(onsets[idx].cpu().numpy()[::-1]); plt.show()
                 # idx = 0; plt.clf(); plt.imshow(double_onsets[idx].cpu().numpy()[::-1]); plt.show()
 
-                ##################################################################
+                # ##############################################################
 
             # zero the parameter gradients
             opt.zero_grad()
@@ -481,11 +479,12 @@ if __name__ == "__main__":
                 losses = [vel_loss.item()]
                 if CONF.TRAINABLE_ONSETS:
                     losses.append(ons_loss.item())
-                txt_logger.loj("TRAIN", {"epoch": epoch,
-                                         "step": i,
-                                         "global_step": global_step,
-                                         "batches_per_epoch": batches_per_epoch,
-                                         "losses": losses,
-                                         "LR": opt.get_lr()})
-            #
+                txt_logger.loj("TRAIN",
+                               {"epoch": epoch,
+                                "step": i,
+                                "global_step": global_step,
+                                "batches_per_epoch": batches_per_epoch,
+                                "losses": losses,
+                                "LR": opt.get_lr()})
+                #
             global_step += 1

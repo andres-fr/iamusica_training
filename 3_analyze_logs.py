@@ -50,7 +50,8 @@ if __name__ == "__main__":
     # ['PARAMETERS', 'WARNING', 'MODEL_INFO', 'TRAIN', 'XV_PROCESSING',
     # 'XV_BEST_ONSET', 'XV_BEST_ONSET_VEL', 'SAVED_MODEL']
     df_types = df[0].unique().tolist()
-    df_by_type = {t: pd.DataFrame(df[df[0] == t][1].tolist()) for t in df_types}
+    df_by_type = {t: pd.DataFrame(df[df[0] == t][1].tolist())
+                  for t in df_types}
 
     params = df_by_type["PARAMETERS"].to_dict("records")[0]
     txt_logger.info("\n".join(f"{k}: {v}" for k, v in params.items()))

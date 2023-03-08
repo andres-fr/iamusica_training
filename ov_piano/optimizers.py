@@ -8,9 +8,6 @@ with warm restarts.
 """
 
 
-import inspect
-#
-import numpy as np
 import torch
 
 
@@ -103,7 +100,8 @@ class CosineSchedule(ConstantSchedule):
         step = 0
         while step < cosine_steps:
             value = self.maximum * torch.cos(
-                torch.tensor(self.PI_HALF * (step / (cosine_steps - 1)))).item()
+                torch.tensor(self.PI_HALF *
+                             (step / (cosine_steps - 1)))).item()
             #
             step += 1
             yield value

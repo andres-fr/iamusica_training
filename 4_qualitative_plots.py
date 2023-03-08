@@ -11,11 +11,10 @@ import os
 from dataclasses import dataclass
 from typing import Optional, List
 #
-from omegaconf import OmegaConf, MISSING
+from omegaconf import OmegaConf
 import torch
 import torch.nn.functional as F
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
 #
@@ -25,9 +24,8 @@ from ov_piano.logging import ColorLogger
 from ov_piano.data.maestro import MetaMAESTROv1, MetaMAESTROv2, MetaMAESTROv3
 from ov_piano.data.maestro import MelMaestro
 from ov_piano.models.ov import OnsetsAndVelocities
-from ov_piano.inference import strided_inference, OnsetVelocityNmsDecoder
+from ov_piano.inference import strided_inference
 from ov_piano.eval import GtLoaderMaestro
-from ov_piano.eval import threshold_eval_single_file
 
 
 # change plot font to latex
@@ -176,8 +174,8 @@ class ConfDef:
     OUTPUT_DIR: Optional[str] = None  # "out/plots"
     FIGSIZE: List[float] = (20, 20)
     DPI: int = 350
-    MEL_CMAP: str = "bone_r"  # cividis
-    ROLL_CMAP: str = "bone_r" # binary
+    MEL_CMAP: str = "bone_r"   # cividis
+    ROLL_CMAP: str = "bone_r"  # binary
     TN_RGB: List[int] = (255, 255, 255)
     TP_RGB: List[int] = (0, 0, 0)
     FP_RGB: List[int] = (179, 179, 255)
@@ -226,10 +224,8 @@ if __name__ == "__main__":
     metamaestro_test = METAMAESTRO_CLASS(
         CONF.MAESTRO_PATH, splits=["test"], years=METAMAESTRO_CLASS.ALL_YEARS)
 
-
     txt_logger.warning("SHORTENING TEST SET LENGTH")
     metamaestro_test.data = metamaestro_test.data[::5]
-
 
     maestro_test = MelMaestro(
         CONF.HDF5_MEL_PATH, CONF.HDF5_ROLL_PATH,
@@ -258,7 +254,6 @@ if __name__ == "__main__":
         load_model(
             model, CONF.SNAPSHOT_INPATH, eval_phase=True, to_cpu=True)
 
-
     ##############
     # INFERENCE
     ##############
@@ -286,7 +281,7 @@ if __name__ == "__main__":
                 model_inference, tmel, CHUNK_SIZE, CHUNK_OVERLAP)
             onset_pred = onset_pred.cpu().numpy().squeeze()
             vel_pred = vel_pred.cpu().numpy().squeeze()
-        #
+
         def qplot_ranged(min_idx=None, max_idx=None):
             """
             Closure to inspect ranges flexibly via one-liners like::
@@ -294,24 +289,24 @@ if __name__ == "__main__":
 
             Note that the bottom plot has been adjusted to show only the GT.
             """
-            fig, axes = qualitative_plot(mel, triple_onsets,
-                                         onset_pred, vel_pred,
-                                         mel_cmap=CONF.MEL_CMAP,
-                                         roll_cmap=CONF.ROLL_CMAP,
-                                         figsize=CONF.FIGSIZE,
-                                         threshold=CONF.INFERENCE_THRESHOLD,
-                                         # note that we only plot the GT here
-                                         tn_rgb=CONF.TN_RGB, tp_rgb=CONF.TP_RGB,
-                                         fp_rgb=CONF.TN_RGB, fn_rgb=CONF.TP_RGB,
-                                         secs_per_frame=SECS_PER_FRAME,
-                                         title_size=CONF.TITLE_SIZE,
-                                         label_size=CONF.LABEL_SIZE,
-                                         tick_size=CONF.TICK_SIZE,
-                                         ev_title="Onset Ground Truth",
-                                         min_idx=min_idx, max_idx=max_idx)
+            fig, axes = qualitative_plot(
+                mel, triple_onsets,
+                onset_pred, vel_pred,
+                mel_cmap=CONF.MEL_CMAP,
+                roll_cmap=CONF.ROLL_CMAP,
+                figsize=CONF.FIGSIZE,
+                threshold=CONF.INFERENCE_THRESHOLD,
+                # note that we only plot the GT here
+                tn_rgb=CONF.TN_RGB, tp_rgb=CONF.TP_RGB,
+                fp_rgb=CONF.TN_RGB, fn_rgb=CONF.TP_RGB,
+                secs_per_frame=SECS_PER_FRAME,
+                title_size=CONF.TITLE_SIZE,
+                label_size=CONF.LABEL_SIZE,
+                tick_size=CONF.TICK_SIZE,
+                ev_title="Onset Ground Truth",
+                min_idx=min_idx, max_idx=max_idx)
             return fig, axes
         #
-
 
         figtitle = md[0] + "\n" + " ".join(str(x) for x in md[1:])
         txt_logger.debug(figtitle)

@@ -146,7 +146,6 @@ class JsonColorLogger(ColorLogger):
     FORMAT_STR = ("""["%(asctime)s.%(msecs)03d", %(message)s]""")
     DATE_FORMAT = "%Y-%m-%d_%H:%M:%S"
 
-
     def loj(self, header, body):
         """
         """
