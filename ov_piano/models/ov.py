@@ -11,7 +11,7 @@ This module hosts the main DNNs, making use of PyTorch built-ins and parts from
 import torch
 from .building_blocks import get_relu, SubSpectralNorm, Permuter
 from .building_blocks import ContextAwareModule, DepthwiseConv2d, conv1x1net
-from ..train import init_weights
+from ..utils import init_weights
 
 
 # ##############################################################################
@@ -85,9 +85,9 @@ class OnsetsAndVelocities(torch.nn.Module):
               for _ in range(num_cam_bottlenecks)],
             # from (b, cam_out, h, t) to (b, first_hid, 1, t)
             torch.nn.Conv2d(
-                cam_out_chans, conv1x1[0], (out_bins, summary_width),
+                cam_out_chans, conv1x1head[0], (out_bins, summary_width),
                 padding=(0, 1), bias=False),
-            torch.nn.BatchNorm2d(conv1x1[0], momentum=bn_momentum),
+            torch.nn.BatchNorm2d(conv1x1head[0], momentum=bn_momentum),
             get_relu(leaky_relu_slope),
             # from (b, first_hid, 1, t) to (b, out_bins, 1, t)
             conv1x1net((*conv1x1head, out_bins), bn_momentum,
@@ -107,7 +107,7 @@ class OnsetsAndVelocities(torch.nn.Module):
         """
         super().__init__()
         #
-        stem_chans = self.STEM_HDC_CHANS * len(self.STEM_KSIZES)
+        stem_chans = self.STEM_CAM_HDC_CHANS * len(self.STEM_CAM_KSIZES)
         vel_in_chans = stem_chans + 1
         #
         self.specnorm = SubSpectralNorm(

@@ -10,6 +10,7 @@ various modules and applications.
 
 import os
 import json
+import random
 #
 import torch
 import torchaudio
@@ -200,10 +201,10 @@ def save_model(model, path):
     torch.save(model.state_dict(), path)
 
 
-def load_model(model, path, eval_phase=True, strict=True):
+def load_model(model, path, eval_phase=True, strict=True, to_cpu=False):
     """
     """
-    state_dict = torch.load(path)
+    state_dict = torch.load(path, map_location="cpu" if to_cpu else None)
     model.load_state_dict(state_dict, strict=strict)
     if eval_phase:
         model.eval()
@@ -242,6 +243,15 @@ class ModelSaver:
 # ##############################################################################
 # # TRAINING UTILS
 # ##############################################################################
+def set_seed(seed=0):
+    """
+    Set randomness seed for Python, NumPy and PyTorch.
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+
+
 def breakpoint_json(path="breakpoint.json", step=None):
     """
     This function can be used to trigger a breakpoint during training, by

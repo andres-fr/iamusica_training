@@ -9,7 +9,7 @@ PyTorch building blocks.
 
 import torch
 #
-from ..train import init_weights
+from ..utils import init_weights
 
 
 # ##############################################################################

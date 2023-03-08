@@ -66,7 +66,7 @@ class ConfDef:
     TARGET_SR: int = 16_000
     STFT_WINSIZE: int = 2048
     STFT_HOPSIZE: int = 384
-    MELBINS: int = 250
+    MELBINS: int = 229
     MEL_FMIN: int = 50
     MEL_FMAX: int = 8_000
     #

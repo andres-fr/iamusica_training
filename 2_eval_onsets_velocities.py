@@ -25,7 +25,7 @@ and the test evaluation is performed only once.
 import os
 # For omegaconf
 from dataclasses import dataclass
-from typing import List
+from typing import Optional, List
 #
 from omegaconf import OmegaConf, MISSING
 import torch
@@ -38,7 +38,7 @@ from ov_piano.utils import load_model
 from ov_piano.logging import ColorLogger
 from ov_piano.data.maestro import MetaMAESTROv1, MetaMAESTROv2, MetaMAESTROv3
 from ov_piano.data.maestro import MelMaestro
-import ov_piano.models
+from ov_piano.models.ov import OnsetsAndVelocities
 from ov_piano.inference import strided_inference, OnsetVelocityNmsDecoder
 from ov_piano.eval import GtLoaderMaestro
 from ov_piano.eval import threshold_eval_single_file
@@ -110,6 +110,7 @@ class ConfDef:
     SNAPSHOT_INPATH: str = MISSING
     #
     CONV1X1: List[int] = (200, 200)
+    LEAKY_RELU_SLOPE: Optional[float] = 0.1
     #
     XV_TAKE_ONE_EVERY: int = 5
     SEARCH_THRESHOLDS: List[float] = (0.70, 0.71, 0.72, 0.73, 0.74, 0.75,
@@ -195,9 +196,9 @@ if __name__ == "__main__":
         in_chans=2,  # X and time_derivative(X)
         in_height=num_mels, out_height=num_piano_keys,
         conv1x1head=CONF.CONV1X1,
-        bn_momentum=CONF.BATCH_NORM,
+        bn_momentum=0,
         leaky_relu_slope=CONF.LEAKY_RELU_SLOPE,
-        dropout_drop_p=CONF.DROPOUT).to(CONF.DEVICE)
+        dropout_drop_p=0).to(CONF.DEVICE)
     load_model(model, CONF.SNAPSHOT_INPATH, eval_phase=True)
     # instantiate decoder
     decoder = OnsetVelocityNmsDecoder(

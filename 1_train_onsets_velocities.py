@@ -234,11 +234,6 @@ if __name__ == "__main__":
     key_beg, key_end = PIANO_MIDI_RANGE
     num_piano_keys = key_end - key_beg
 
-
-(self, in_chans, in_height, out_height, conv1x1head=(200, 200),
-                 bn_momentum=0.1, leaky_relu_slope=0.1, dropout_drop_p=0.1,
-                 init_fn=torch.nn.init.kaiming_normal_, se_init_bias=1.0):
-
     # DNN (instantiation+serialization)
     model = OnsetsAndVelocities(
         in_chans=2,  # X and time_derivative(X)
