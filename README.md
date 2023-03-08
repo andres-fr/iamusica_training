@@ -1,7 +1,9 @@
 # iamusica_training
 
-<img src="assets/qualitative_plot_bone_small.png" alt="Onsets and Velocities input/output example" width="80.0%"/>
 
+<p align="center">
+<img src="assets/qualitative_plot_bone_small.png" alt="Onsets and Velocities input/output example" width="60.0%"/>
+</p>
 The present repository hosts the software needed to train and evaluate the Deep Learning piano onset+velocity detection model presented in our paper: ***Onsets and Velocities: Affordable Real-Time Piano Transcription Using Convolutional Neural Networks***. Specifically, it provides the means to:
 * Install the required software dependencies
 * Download and preprocess the required dataset
