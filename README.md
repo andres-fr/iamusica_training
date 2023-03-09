@@ -5,7 +5,7 @@
 <img src="assets/qualitative_plot_bone_small.png" alt="Onsets and Velocities input/output example" width="60.0%"/>
 </p>
 
-The present repository hosts the software needed to train and evaluate the Deep Learning piano onset+velocity detection model presented in our paper: *Onsets and Velocities: Affordable Real-Time Piano Transcription Using Convolutional Neural Networks*. Specifically, it provides the means to:
+The present repository hosts the software needed to train and evaluate the Deep Learning piano onset+velocity detection model presented in our [paper](https://arxiv.org/abs/2303.04485): *Onsets and Velocities: Affordable Real-Time Piano Transcription Using Convolutional Neural Networks*. Specifically, it provides the means to:
 * Install the required software dependencies
 * Download and preprocess the required dataset
 * Run and evaluate (pre)trained models
@@ -20,13 +20,16 @@ See [this companion repository](https://github.com/andres-fr/iamusica_demo) for 
 * [Joan Lluís Travé Pla](https://joantrave.net/en)
 * [Andrés Fernández Rodríguez](https://aferro.dynu.net)
 
-This is [Free/Libre and Open Source Software](https://www.gnu.org/philosophy/floss-and-foss.en.html), see the [LICENSE](LICENSE) for more details. If you use this work, please consider citing the paper:
+This is [Free/Libre and Open Source Software](https://www.gnu.org/philosophy/floss-and-foss.en.html), see the [LICENSE](LICENSE) for more details. If you use this work, please consider citing the [paper](https://arxiv.org/abs/2303.04485):
 
 ```
-@article{onsvel,
-    title   = "{Onsets and Velocities}: Affordable Real-Time Piano Transcription Using Convolutional Neural Networks"
-    author  = "Andres Fernandez",
-    year    = "2023",
+@misc{onsvel,
+      title={{Onsets and Velocities}: Affordable Real-Time Piano Transcription Using Convolutional Neural Networks},
+      author={Andres Fernandez},
+      year={2023},
+      eprint={2303.04485},
+      archivePrefix={arXiv},
+      primaryClass={cs.SD}
 }
 ```
 
@@ -132,7 +135,7 @@ MAPS ROOT PATH
 
 # Data preprocessing
 
-To train the model, we represent the audio as log-mel spectrograms and the annotations as piano rolls (see paper for details). To speed up training and avoid redundant computations, we preprocess the full datasets ahead of time into [HDF5](https://www.h5py.org/) files.
+To train the model, we represent the audio as log-mel spectrograms and the annotations as piano rolls (see [paper](https://arxiv.org/abs/2303.04485) for details). To speed up training and avoid redundant computations, we preprocess the full datasets ahead of time into [HDF5](https://www.h5py.org/) files.
 
 Assuming `MAESTROv3` is in `datasets/maestro/maestro-v3.0.0`, preprocessing with the default parameters can be done by simply calling the following script:
 
@@ -271,7 +274,7 @@ Note that the default is simply to ignore this file, and to stop the training, t
 
 # Plot examples
 
-The qualitative plot used in the paper can be reproduced with the following command:
+The qualitative plot used in the [paper](https://arxiv.org/abs/2303.04485) can be reproduced with the following command:
 
 
 ```
