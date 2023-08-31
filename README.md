@@ -23,13 +23,11 @@ See [this companion repository](https://github.com/andres-fr/iamusica_demo) for 
 This is [Free/Libre and Open Source Software](https://www.gnu.org/philosophy/floss-and-foss.en.html), see the [LICENSE](LICENSE) for more details. If you use this work, please consider citing the [paper](https://arxiv.org/abs/2303.04485):
 
 ```
-@misc{onsvel,
+@inproceedings{onsvel,
       title={{Onsets and Velocities}: Affordable Real-Time Piano Transcription Using Convolutional Neural Networks},
       author={Andres Fernandez},
       year={2023},
-      eprint={2303.04485},
-      archivePrefix={arXiv},
-      primaryClass={cs.SD}
+      booktitle={{EUSIPCO} Proceedings},
 }
 ```
 
